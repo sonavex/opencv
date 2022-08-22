@@ -112,7 +112,7 @@ if(CUDA_FOUND)
   if(CUDA_GENERATION)
     if(NOT ";${_generations};" MATCHES ";${CUDA_GENERATION};")
       string(REPLACE ";" ", " _generations "${_generations}")
-      message(FATAL_ERROR "ERROR: ${_generations} Generations are suppered.")
+      message(FATAL_ERROR "ERROR: ${_generations} Generations are supported.")
     endif()
     unset(CUDA_ARCH_BIN CACHE)
     unset(CUDA_ARCH_PTX CACHE)
@@ -253,12 +253,13 @@ if(CUDA_FOUND)
       endif()
       if(NOT _nvcc_res EQUAL 0)
         message(STATUS "Automatic detection of CUDA generation failed. Going to build for all known architectures.")
-        # TX1 (5.3) TX2 (6.2) Xavier (7.2) V100 (7.0)
+        # TX1 (5.3) TX2 (6.2) Xavier (7.2) V100 (7.0) Orin (8.7)
         ocv_filter_available_architecture(__cuda_arch_bin
             5.3
             6.2
             7.2
             7.0
+            8.7
         )
       else()
         set(__cuda_arch_bin "${_nvcc_out}")

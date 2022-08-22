@@ -278,6 +278,21 @@ std::shared_ptr<CvWindow> icvFindWindowByName(const char* name)
     return icvFindWindowByName(std::string(name));
 }
 
+// Mutex must be locked
+static
+std::shared_ptr<CvWindow> icvFindWindowByHandle(HWND hwnd)
+{
+    auto& g_windows = getWindowsList();
+    for (auto it = g_windows.begin(); it != g_windows.end(); ++it)
+    {
+        auto window = *it;
+        if (!window)
+            continue;
+        if (window->hwnd == hwnd || window->frame == hwnd)
+            return window;
+    }
+    return std::shared_ptr<CvWindow>();
+}
 
 
 static LRESULT CALLBACK HighGUIProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -2117,6 +2132,7 @@ cvDestroyAllWindows(void)
 
 static void showSaveDialog(CvWindow& window)
 {
+#ifdef HAVE_OPENCV_IMGCODECS
     if (!window.image)
         return;
 
@@ -2178,6 +2194,11 @@ static void showSaveDialog(CvWindow& window)
         cv::flip(cv::Mat(sz.cy, sz.cx, CV_8UC(channels), data, (sz.cx * channels + 3) & -4), tmp, 0);
         cv::imwrite(szFileName, tmp);
     }
+#else
+    CV_UNUSED(window);
+    CV_LOG_WARNING("Save dialog requires enabled 'imgcodecs' module.");
+    return;
+#endif
 }
 
 /*
@@ -2187,22 +2208,15 @@ static void showSaveDialog(CvWindow& window)
  */
 static bool handleMessage(MSG& message, int& keyCode)
 {
-    // whether we have to call translate and dispatch yet
-    // otherwise the message was handled specifically
-    bool is_processed = false;
-
-    AutoLock lock(getWindowMutex());
-    auto& g_windows = getWindowsList();
-    for (auto it = g_windows.begin(); it != g_windows.end() && !is_processed; ++it)
+    std::shared_ptr<CvWindow> window_;
     {
-        auto window_ = *it;
-        if (!window_)
-            continue;
+        AutoLock lock(getWindowMutex());
+        window_ = icvFindWindowByHandle(message.hwnd);
+    }
+    if (window_)
+    {
         CvWindow& window = *window_;
-        if (!(window.hwnd == message.hwnd || window.frame == message.hwnd))
-            continue;
 
-        is_processed = true;
         switch (message.message)
         {
             case WM_DESTROY:
@@ -2215,7 +2229,6 @@ static bool handleMessage(MSG& message, int& keyCode)
             case WM_SYSKEYDOWN:
                 if (message.wParam == VK_F10)
                 {
-                    is_processed = true;
                     keyCode = (int)(message.wParam << 16);
                     return true;
                 }
@@ -2245,7 +2258,6 @@ static bool handleMessage(MSG& message, int& keyCode)
                     message.wParam == VK_PRIOR  || message.wParam == VK_NEXT)
                 {
                     DispatchMessage(&message);
-                    is_processed = true;
                     keyCode = (int)(message.wParam << 16);
                     return true;
                 }
@@ -2254,18 +2266,16 @@ static bool handleMessage(MSG& message, int& keyCode)
 
             default:
                 DispatchMessage(&message);
-                is_processed = true;
                 break;
         }
     }
-
-    if (!is_processed)
+    else
     {
         TranslateMessage(&message);
         DispatchMessage(&message);
     }
 
-    return false; // no value to return, keep processing
+    return false; // no keyCode to return, keep processing
 }
 
 /*
@@ -2980,7 +2990,7 @@ public:
         CvTrackbar& trackbar = *trackbar_ptr;
         CV_CheckLE(range.start, range.end, "Invalid trackbar range");
         trackbar.minval = range.start;
-        trackbar.maxval = range.start;
+        trackbar.maxval = range.end;
         SendMessage(trackbar.hwnd, TBM_SETRANGEMIN, (WPARAM)TRUE, (LPARAM)trackbar.minval);
         SendMessage(trackbar.hwnd, TBM_SETRANGEMAX, (WPARAM)TRUE, (LPARAM)trackbar.maxval);
     }
